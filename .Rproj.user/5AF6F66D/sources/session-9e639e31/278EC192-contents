@@ -1,0 +1,2800 @@
+---
+title: "Monitoreo ENSO"
+date: '\today'
+author: "CIO Challenger"
+email: "20180177@lamolina.edu.pe"
+output: 
+  flexdashboard::flex_dashboard:
+    theme: spacelab
+    vertical_layout: scroll
+    horizontal_layout: scroll
+    social: menu
+    mathjax: NULL
+---
+
+```{r setup, include=FALSE, }
+knitr::opts_chunk$set( message=FALSE)
+
+
+setwd("C:/Users/ASUS/Desktop/CIO")
+library(threadr)
+library(RCurl)
+#remotes::install_github("skgrange/threadr")
+var <- c("iso","dyn","w","t")
+ct <- "taopmelftp:G10b@LCh@Ng3"
+vec1 <- c()
+
+
+
+for (j in 1:length(var)){
+  lon <- c("165e","180w","170w")
+  lat <- c("5n","2n","0n","2s","5s")
+  for (i in 1:length(lon)){
+    for (k in 1:length(lat)){
+      download_ftp_file(paste0("ftp://ftp.pmel.noaa.gov/cdf/sites/daily/",var[j],lat[k],lon[i],"_dy.cdf"),paste0(var[j],lat[k],lon[i],"_dy.cdf"),credentials = ct )
+    vec1 <- c(vec1,paste0(var[j],lat[k],lon[i],"_dy.cdf"))
+    }
+  }
+}
+
+vec2 <- c()
+for (j in 1:length(var)){
+  lon <- c("110w","95w")
+  lat <- c("5n","2n","0n","2s","5s")
+  for (i in 1:length(lon)){
+    for (k in 1:length(lat)){
+      download_ftp_file(paste0("ftp://ftp.pmel.noaa.gov/cdf/sites/daily/",var[j],lat[k],lon[i],"_dy.cdf"),paste0(var[j],lat[k],lon[i],"_dy.cdf"),credentials = ct )
+    vec2 <- c(vec2,paste0(var[j],lat[k],lon[i],"_dy.cdf"))
+    }
+  }
+}
+
+
+vec3 <- c()
+for (j in 1:length(var)){
+  lon <- c("155w","140w","125w")
+  lat <- c("5n","2n","0n","2s","5s")
+  for (i in 1:length(lon)){
+    for (k in 1:length(lat)){
+      download_ftp_file(paste0("ftp://ftp.pmel.noaa.gov/cdf/sites/daily/",var[j],lat[k],lon[i],"_dy.cdf"),paste0(var[j],lat[k],lon[i],"_dy.cdf"),credentials = ct )
+    vec3 <- c(vec3,paste0(var[j],lat[k],lon[i],"_dy.cdf"))
+    }
+  }
+}
+
+library(ncdf4)
+library(tidyverse)
+library(plotly)
+library(leaflet)
+library(tidyverse)
+library(leaflet.extras)
+
+#Estaciones a trabajar
+path <- c(vec1)[1:45]
+
+data_iso<- list()
+data_dyn<- list()
+clim2 <- list()
+gpl2 <- list()
+gpl4 <- list()
+
+#############Niño 4
+for (k in 1:length(path)) {
+
+  data<- nc_open(path[k])
+  
+  if (substr(path[k], start = 1, stop = 3) == "iso" ){
+    nc <- ncvar_get(data,"ISO_6")
+    }else if(substr(path[k], start = 1, stop = 3) == "dyn"){
+    nc <- ncvar_get(data,"DYN_13")
+    }else{
+      nc <- ncvar_get(data,"WU_422")
+    }
+  
+
+  time <- ncvar_get(data,"time")
+  tunits <- ncatt_get(data, "time", "units")[[2]]
+  ini <- substr(tunits,start = 12, stop = 21)
+  time <- as.Date(ini) + time
+  df <- data.frame(time,nc)
+  
+  clim <- df %>% filter(time<="2020-12-31") %>%
+    mutate(mes = as.numeric(format(time,'%m')),
+           dia = as.numeric(format(time,'%d'))) %>%
+    group_by(mes,dia) %>%
+    summarise(nc= mean(nc,na.rm = T))
+  clim <- data.frame(clim)
+  
+  Fecha = seq(as.Date("0000-01-01"),as.Date("0000-12-31"),by="day")
+  clim <- data.frame(Fecha,clim)
+  clim2[[k]] <- clim
+  yl <- c(rep("Isoterma 20ºC",15),rep("Altura dinámica (cm)",15),rep("Viento zonal (m/s)",15))
+  
+  clim <- clim[-60,]
+  act <- df[df$time >= "2023-01-01",]
+  colnames(act) <- c("Fecha","nc")
+  dt <- data.frame(clim, a2023=data.frame(c(act$nc,rep(NA,365-length(act$nc)))))
+  colnames(dt)[c(4,5)]<- c("Climatologia","Año_2023")
+  dt$anomalia <- dt$Año_2023-dt$Climatologia
+  
+  if (k <=15){
+  
+  graph <- ggplot(data=dt,aes(x= Fecha,y=Climatologia))+
+    geom_line(col="red")+
+    ggtitle(paste0("Boya ",yl[k]," ",substr(path,4,9)[k] ))+theme_bw()+xlab("Fecha")+ylab("")+
+    geom_line(aes(x=Fecha,y=Año_2023),col="dodgerblue2")+scale_x_date(date_labels = "%b")+
+  theme(plot.title = element_text(hjust = 0.5))+ scale_y_continuous(breaks= seq(20,260,10))+ylim(c(260,20))
+  
+  graph2 <- ggplot(data=dt,aes(x= Fecha,y=anomalia))+
+    geom_hline(yintercept=0)+
+     ggtitle(paste0(" Anomalía Boya ",yl[k]," ",substr(path,4,9)[k] ))+theme_bw()+xlab("Fecha")+ylab("")+
+     geom_line(col="#008B00")+scale_x_date(date_labels = "%b")+
+     theme(plot.title = element_text(hjust = 0.5))+ scale_y_continuous(breaks= seq(-50,75,10))+ylim(c(75,-50))
+  }
+  
+  
+  if (k >=16 & k <=30){
+    graph <- ggplot(data=dt,aes(x= Fecha,y=Climatologia))+
+    geom_line(col="red")+
+    ggtitle(paste0("Boya ",yl[k]," ",substr(path,4,9)[k] ))+theme_bw()+xlab("Fecha")+ylab("")+
+    geom_line(aes(x=Fecha,y=Año_2023),col="dodgerblue2")+scale_x_date(date_labels = "%b")+
+  theme(plot.title = element_text(hjust = 0.5))+ scale_y_continuous(breaks= seq(80,170,10))+ylim(c(80,170))
+    
+    graph2 <- ggplot(data=dt,aes(x= Fecha,y=anomalia))+
+    geom_hline(yintercept=0)+
+    ggtitle(paste0(" Anomalía Boya ",yl[k]," ",substr(path,4,9)[k] ))+theme_bw()+xlab("Fecha")+ylab("")+
+     geom_line(col="#008B00")+scale_x_date(date_labels = "%b")+
+     theme(plot.title = element_text(hjust = 0.5))+ scale_y_continuous(breaks= seq(-15,30,5))+ylim(c(-15,30))
+    
+    
+    
+  }
+  if (k >=31){
+    graph <- ggplot(data=dt,aes(x= Fecha,y=Climatologia))+
+    geom_bar(fill="red",alpha=0.5,stat='identity')+
+    ggtitle(paste0("Boya ",yl[k]," ",substr(path,4,9)[k] ))+theme_bw()+xlab("Fecha")+ylab("")+
+    geom_bar(aes(x=Fecha,y=Año_2023),fill="dodgerblue2",alpha=0.5,stat='identity')+scale_x_date(date_labels = "%b")+
+  theme(plot.title = element_text(hjust = 0.5))+ coord_flip()+geom_vline(xintercept = 0,colour="red")+ scale_y_continuous(breaks= seq(-12,6,2))+ylim(c(-12,6))
+    
+    graph2 <- ggplot(data=dt,aes(x= Fecha,y=Año_2023-Climatologia))+
+    ggtitle(paste0("Anomalía Boya ",yl[k]," ",substr(path,4,9)[k] ))+theme_bw()+xlab("Fecha")+ylab("")+
+    geom_bar(aes(x=Fecha,y=Año_2023-Climatologia),fill="#008B00",alpha=0.5,stat='identity')+scale_x_date(date_labels = "%b")+
+  theme(plot.title = element_text(hjust = 0.5))+ coord_flip()+geom_hline(yintercept = 0,colour="red")+ scale_y_continuous(breaks= seq(-10,10,2))+ylim(c(-10,10))
+  
+  }
+  
+
+
+  gpl <- partial_bundle(toWebGL(ggplotly(graph)))
+  gpl3 <- partial_bundle(toWebGL(ggplotly(graph2)))
+  gpl2[[k]] <- gpl
+  gpl4[[k]] <- gpl3
+  
+
+  
+}
+
+
+path <- c(vec1)
+k
+for (k in 46:60){
+  library(tidyverse)  
+  library(lubridate)
+  library(cowplot)
+  library(reshape2)
+  library(MBA)
+  library(metR)
+  library(ncdf4)
+  library(stringi)
+  library(patchwork)
+
+### ARCHIVO
+  n=nc_open(path[k])
+  TEMP=ncvar_get(n, varid="T_20")
+  depth=ncvar_get(n, varid="depth")
+
+  row.names(TEMP)=depth
+
+  time <- ncvar_get(n,"time")
+  tunits <- ncatt_get(n, "time", "units")[[2]]
+  ini <- substr(tunits,start = 12, stop = 21)
+  FECHA <- as.Date(ini) + time
+
+
+  TEMP<- as.data.frame(t(TEMP))
+  TEMP=cbind(FECHA,TEMP)
+
+  df=TEMP
+  sapply(df,class)
+  cols <- names(df)[2:ncol(df)]
+  df[cols] <- lapply(df[cols], as.numeric)
+
+  str(df)
+#pivot table
+  df=df %>% filter(FECHA<="2020-12-31") %>%
+  group_by(month = month(FECHA), day = day(FECHA)) %>%
+  summarise_if(is.numeric, mean , na.rm=TRUE)
+
+  df[1:2]=NULL
+  df <- data.frame(df)
+  prof=as.numeric(dim(df)[2])
+
+  sub= subset(TEMP, FECHA>="2023-01-01" & FECHA<=Sys.Date()-2 )
+  a <- length(sub$FECHA)
+  length(sub)
+  sub[1]= NULL
+
+  profund=as.numeric(dim(sub)[2])    #numero de profundidades
+
+  SECCION=melt(sub, id=0)
+  colnames(SECCION)=c("PROFUNDIDAD","TEMPERATURA")
+  SECCION$PROFUNDIDAD<-stri_replace_first_regex(SECCION$PROFUNDIDAD, "[X]", "")
+  SECCION$PROFUNDIDAD=as.numeric(SECCION$PROFUNDIDAD)
+  SECCION$DIA=rep(1:a,profund)
+  SECCION=na.omit(SECCION)
+  col_order <- c("DIA","PROFUNDIDAD","TEMPERATURA")
+  SECCION2 <- SECCION[, col_order]
+
+#interpolacion
+#Numero de pixeles
+  mba.int <- mba.surf(SECCION2, no.X = 300, no.Y = 300, extend = T)
+  mba=mba.int$xyz.est
+  rownames(mba$z)=mba$x
+  colnames(mba$z)=mba$y
+  df2=melt(mba$z, varnames = c('x', 'y'))
+
+#ESCALA DE COLORES
+  ODV_colours <-c(
+  "#feb483", "#d31f2a", "#ff8400","#ffc000", "#27ab19", "#0db5e6", "#7139fe", "#d16cfa"
+)
+
+
+#GRAFICO
+  st_1 <- ggplot(data = df2, aes(x = x, y = y)) +
+  geom_raster(aes(fill = value),breaks=seq(6,32,1),limits=c(6,32)) +
+  geom_contour_fill(aes(z = value), binwidth = 1, alpha = 0.35)+
+  geom_contour(aes(z = value), breaks =seq(6,32,2),limits=c(6,32), colour =  "black")+geom_text_contour(aes(z = value),stroke   = 0.1,skip=0,check_overlap=T,size=3) +
+  scale_fill_gradientn(colours = rev(ODV_colours),breaks=seq(6,32,2),limits=c(6,32))+
+  labs(y = "Profundidad (m)", x = "Mes", fill = "Temp. (°C)") +
+  scale_y_reverse(breaks = seq(0,400,50),limits=c(400,0))+
+  scale_x_continuous(breaks=c(15.5,45.5,75.5,106,136.5,167,197.5,228.5,259,289.5,320,350.5),labels=c("Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","sep","oct","Nov","Dic"))+ggtitle(paste0("Temperatura Subsuperficial Boya ",substr(path,4,9)[k]))+
+  theme(plot.title = element_text(hjust = 0.5,face="bold"))+theme(panel.border = element_blank(), panel.background = element_blank())+guides(fill = guide_colourbar(barwidth = 1.5, barheight = 15))+
+  geom_contour_fill(aes(z = value), binwidth = 30, colour = "black", alpha = 0) 
+
+  df <- df[-60,]
+  anom <- sub-df[1:(length(sub[,1])),]
+
+
+  SECCION=melt(anom, id=0)
+  colnames(SECCION)=c("PROFUNDIDAD","TEMPERATURA")
+  SECCION$PROFUNDIDAD<-stri_replace_first_regex(SECCION$PROFUNDIDAD, "[X]", "")
+  SECCION$PROFUNDIDAD=as.numeric(SECCION$PROFUNDIDAD)
+  SECCION$DIA=rep(1:a,profund)
+  SECCION=na.omit(SECCION)
+  col_order <- c("DIA","PROFUNDIDAD","TEMPERATURA")
+  SECCION2 <- SECCION[, col_order]
+
+#interpolacion
+#Numero de pixeles
+  mba.int <- mba.surf(SECCION2, no.X = 300, no.Y = 300, extend = T)
+  mba=mba.int$xyz.est
+  rownames(mba$z)=mba$x
+  colnames(mba$z)=mba$y
+  df2=melt(mba$z, varnames = c('x', 'y'))
+
+
+  ODV_colours <- c("#000ba3","#021fe7","#0345fe","#0076ff","#0691fe","#0aa0fd","#0daffc","#6fd2ff","#a5e5fe","#d3f3ff",
+                 "#ffffff","#fef9d2","#ffde62","#ffc105","#ffa500","#ff7d01","#f92d00","#e92400","#d81d00","#c51301","#b00d00") 
+
+
+  st_2 <- ggplot(data = df2, aes(x = x, y = y))+
+  geom_raster(aes(fill = value),breaks=seq(-8,8,0.5),limits=c(-8,8))+
+  geom_contour_fill(aes(z = value), binwidth = 1, alpha = 0.35)+
+  geom_contour(aes(z = value), breaks =seq(-8,8,1),limits=c(-8,8), colour =  "black")+geom_text_contour(aes(z = value),stroke   = 0.1,skip=0,check_overlap=T,size=3) +
+  scale_fill_gradientn(colours = (ODV_colours),breaks=seq(-8,8,1),limits=c(-8,8))+
+  labs(y = "Profundidad (m)", x = "Mes", fill = "Temp. (°C)") +
+  scale_y_reverse(breaks = seq(0,400,50),limits=c(400,0))+
+  scale_x_continuous(breaks=c(15.5,45.5,75.5,106,136.5,167,197.5,228.5,259,289.5,320,350.5),labels=c("Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","sep","oct","Nov","Dic"))+ggtitle(paste0("Anomalía Temperatura Subsuperficial Boya ",substr(path,4,9)[k]))+
+  theme(plot.title = element_text(hjust = 0.5,face="bold"))+theme(panel.border = element_blank(), panel.background = element_blank())+guides(fill = guide_colourbar(barwidth = 1.5, barheight = 15)) +
+  geom_contour_fill(aes(z = value), binwidth = 30, colour = "black", alpha = 0)
+  
+  gpl2[[k]] <- st_1
+  gpl4[[k]] <- st_2
+
+
+}
+gpl2[[60]]
+
+
+
+
+
+
+
+
+
+
+################################# NIño 3
+path2 <- c(vec2)[1:30]
+gpl5 <- list()
+gpl6 <- list()
+
+for (k in 1:length(path2)) {
+  
+  data<- nc_open(path2[k])
+  
+  if (substr(path2[k], start = 1, stop = 3) == "iso"){
+    nc <- ncvar_get(data,"ISO_6")
+    }else if(substr(path2[k], start = 1, stop = 3) == "dyn"){
+    nc <- ncvar_get(data,"DYN_13")
+    }else{
+      nc <- ncvar_get(data,"WU_422")
+    }
+  
+
+  time <- ncvar_get(data,"time")
+  tunits <- ncatt_get(data, "time", "units")[[2]]
+  ini <- substr(tunits,start = 12, stop = 21)
+  time <- as.Date(ini) + time
+  df <- data.frame(time,nc)
+  
+  clim <- df %>% filter(time<="2020-12-31") %>%
+    mutate(mes = as.numeric(format(time,'%m')),
+           dia = as.numeric(format(time,'%d'))) %>%
+    group_by(mes,dia) %>%
+    summarise(nc= mean(nc,na.rm = T))
+  clim <- data.frame(clim)
+  
+  Fecha = seq(as.Date("0000-01-01"),as.Date("0000-12-31"),by="day")
+  clim <- data.frame(Fecha,clim)
+  clim2[[k]] <- clim
+  yl <- c(rep("Isoterma 20ºC",15),rep("Altura dinámica (cm)",15),rep("Viento zonal (m/s)",15))
+  
+  clim <- clim[-60,]
+  act <- df[df$time >= "2023-01-01",]
+  colnames(act) <- c("Fecha","nc")
+  dt <- data.frame(clim, a2023=data.frame(c(act$nc,rep(NA,365-length(act$nc)))))
+  colnames(dt)[c(4,5)]<- c("Climatologia","Año_2023")
+  dt$anomalia <- dt$Año_2023-dt$Climatologia
+  
+  if (k <=10){
+  
+  graph <- ggplot(data=dt,aes(x= Fecha,y=Climatologia))+
+    geom_line(col="red")+
+    ggtitle(paste0("Boya ",yl[k]," ",substr(path,4,9)[k] ))+theme_bw()+xlab("Fecha")+ylab("")+
+    geom_line(aes(x=Fecha,y=Año_2023),col="dodgerblue2")+scale_x_date(date_labels = "%b")+
+  theme(plot.title = element_text(hjust = 0.5))+ scale_y_continuous(breaks= seq(20,260,10))+ylim(c(260,20))
+  
+  graph2 <- ggplot(data=dt,aes(x= Fecha,y=anomalia))+
+    geom_hline(yintercept=0)+
+    geom_line(col="#008B00")+
+    ggtitle(paste0(" Anomalía Boya ",yl[k]," ",substr(path,4,9)[k] ))+theme_bw()+xlab("Fecha")+ylab("")+
+  scale_x_date(date_labels = "%b")+
+  theme(plot.title = element_text(hjust = 0.5))+ scale_y_continuous(breaks= seq(-50,75,10))+ylim(c(75,-50))
+  }
+  
+  if (k >=11 & k <=20){
+    graph <- ggplot(data=dt,aes(x= Fecha,y=Climatologia))+
+    geom_line(col="red")+
+    ggtitle(paste0("Boya ",yl[k]," ",substr(path2,4,9)[k] ))+theme_bw()+xlab("Fecha")+ylab("")+
+    geom_line(aes(x=Fecha,y=Año_2023),col="dodgerblue2")+scale_x_date(date_labels = "%b")+
+  theme(plot.title = element_text(hjust = 0.5))+ scale_y_continuous(breaks= seq(80,170,10))+ylim(c(80,170))
+    
+    graph2 <- ggplot(data=dt,aes(x= Fecha,y=anomalia))+
+    geom_hline(yintercept=0)+
+    ggtitle(paste0(" Anomalía Boya ",yl[k]," ",substr(path2,4,9)[k] ))+theme_bw()+xlab("Fecha")+ylab("")+
+    geom_line(aes(x=Fecha,y=anomalia),col="#008B00")+scale_x_date(date_labels = "%b")+
+  theme(plot.title = element_text(hjust = 0.5))+ scale_y_continuous(breaks= seq(-15,30,5))+ylim(c(-15,30))
+    
+    
+  }
+  if (k >=21){
+    graph <- ggplot(data=dt,aes(x= Fecha,y=Climatologia))+
+    geom_bar(fill="red",alpha=0.5,stat='identity')+
+    ggtitle(paste0("Boya ",yl[k]," ",substr(path2,4,9)[k] ))+theme_bw()+xlab("Fecha")+ylab("")+
+    geom_bar(aes(x=Fecha,y=Año_2023),fill="dodgerblue2",alpha=0.5,stat='identity')+scale_x_date(date_labels = "%b")+
+  theme(plot.title = element_text(hjust = 0.5))+ coord_flip()+geom_vline(xintercept = 0,colour="red")+ scale_y_continuous(breaks= seq(-12,6,2))+ylim(c(-12,6))
+    
+    graph2 <- ggplot(data=dt,aes(x= Fecha,y=Año_2023-Climatologia))+
+    ggtitle(paste0("Anomalía Boya ",yl[k]," ",substr(path2,4,9)[k] ))+theme_bw()+xlab("Fecha")+ylab("")+
+    geom_bar(aes(x=Fecha,y=Año_2023-Climatologia),fill="#008B00",alpha=0.5,stat='identity')+scale_x_date(date_labels = "%b")+
+  theme(plot.title = element_text(hjust = 0.5))+ coord_flip()+geom_hline(yintercept = 0,colour="red")+ scale_y_continuous(breaks= seq(-10,10,2))+ylim(c(-10,10))
+  
+  }
+  
+  gpl7 <- partial_bundle(toWebGL(ggplotly(graph)))
+  gpl8 <- partial_bundle(toWebGL(ggplotly(graph2)))
+  gpl5[[k]] <- gpl7
+  gpl6[[k]] <- gpl8
+}
+
+
+path2 <- c(vec2)
+
+for (k in 31:40){
+  library(tidyverse)  
+  library(lubridate)
+  library(cowplot)
+  library(reshape2)
+  library(MBA)
+  library(metR)
+  library(ncdf4)
+  library(stringi)
+
+### ARCHIVO
+  n=nc_open(path2[k])
+  TEMP=ncvar_get(n, varid="T_20")
+  depth=ncvar_get(n, varid="depth")
+
+  row.names(TEMP)=depth
+
+  time <- ncvar_get(n,"time")
+  tunits <- ncatt_get(n, "time", "units")[[2]]
+  ini <- substr(tunits,start = 12, stop = 21)
+  FECHA <- as.Date(ini) + time
+
+
+  TEMP<- as.data.frame(t(TEMP))
+  TEMP=cbind(FECHA,TEMP)
+
+  df=TEMP
+  sapply(df,class)
+  cols <- names(df)[2:ncol(df)]
+  df[cols] <- lapply(df[cols], as.numeric)
+
+  str(df)
+#pivot table
+  df=df %>% filter(FECHA<="2020-12-31") %>%
+  group_by(month = month(FECHA), day = day(FECHA)) %>%
+  summarise_if(is.numeric, mean , na.rm=TRUE)
+
+  df[1:2]=NULL
+  df <- data.frame(df)
+  prof=as.numeric(dim(df)[2])
+
+  sub= subset(TEMP, FECHA>="2023-01-01" & FECHA<=Sys.Date()-2)
+  a <- length(sub$FECHA)
+  length(sub)
+  sub[1]= NULL
+
+  profund=as.numeric(dim(sub)[2])    #numero de profundidades
+
+  SECCION=melt(sub, id=0)
+  colnames(SECCION)=c("PROFUNDIDAD","TEMPERATURA")
+  SECCION$PROFUNDIDAD<-stri_replace_first_regex(SECCION$PROFUNDIDAD, "[X]", "")
+  SECCION$PROFUNDIDAD=as.numeric(SECCION$PROFUNDIDAD)
+  SECCION$DIA=rep(1:a,profund)
+  SECCION=na.omit(SECCION)
+  col_order <- c("DIA","PROFUNDIDAD","TEMPERATURA")
+  SECCION2 <- SECCION[, col_order]
+
+#interpolacion
+#Numero de pixeles
+  mba.int <- mba.surf(SECCION2, no.X = 300, no.Y = 300, extend = T)
+  mba=mba.int$xyz.est
+  rownames(mba$z)=mba$x
+  colnames(mba$z)=mba$y
+  df2=melt(mba$z, varnames = c('x', 'y'))
+
+#ESCALA DE COLORES
+  ODV_colours <-c(
+  "#feb483", "#d31f2a", "#ff8400","#ffc000", "#27ab19", "#0db5e6", "#7139fe", "#d16cfa"
+)
+
+
+#GRAFICO
+  st_1 <- ggplot(data = df2, aes(x = x, y = y)) +
+  geom_raster(aes(fill = value),breaks=seq(6,32,1),limits=c(6,32)) +
+  geom_contour_fill(aes(z = value), binwidth = 1, alpha = 0.35)+
+  geom_contour(aes(z = value), breaks =seq(6,32,2),limits=c(6,32), colour =  "black")+geom_text_contour(aes(z = value),stroke   = 0.1,skip=0,check_overlap=T,size=3) +
+  scale_fill_gradientn(colours = rev(ODV_colours),breaks=seq(6,32,2),limits=c(6,32))+
+  labs(y = "Profundidad (m)", x = "Mes", fill = "Temp. (°C)") +
+  scale_y_reverse(breaks = seq(0,400,50),limits=c(400,0))+
+  scale_x_continuous(breaks=c(15.5,45.5,75.5,106,136.5,167,197.5,228.5,259,289.5,320,350.5),labels=c("Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","sep","oct","Nov","Dic"))+ggtitle(paste0("Temperatura Subsuperficial Boya ",substr(path2,4,9)[k]))+
+  theme(plot.title = element_text(hjust = 0.5,face="bold"))+theme(panel.border = element_blank(), panel.background = element_blank())+guides(fill = guide_colourbar(barwidth = 1.5, barheight = 15))+
+  geom_contour_fill(aes(z = value), binwidth = 30, colour = "black", alpha = 0) 
+
+  df <- df[-60,]
+  anom <- sub-df[1:(length(sub[,1])),]
+
+
+  SECCION=melt(anom, id=0)
+  colnames(SECCION)=c("PROFUNDIDAD","TEMPERATURA")
+  SECCION$PROFUNDIDAD<-stri_replace_first_regex(SECCION$PROFUNDIDAD, "[X]", "")
+  SECCION$PROFUNDIDAD=as.numeric(SECCION$PROFUNDIDAD)
+  SECCION$DIA=rep(1:a,profund)
+  SECCION=na.omit(SECCION)
+  col_order <- c("DIA","PROFUNDIDAD","TEMPERATURA")
+  SECCION2 <- SECCION[, col_order]
+
+#interpolacion
+#Numero de pixeles
+  mba.int <- mba.surf(SECCION2, no.X = 300, no.Y = 300, extend = T)
+  mba=mba.int$xyz.est
+  rownames(mba$z)=mba$x
+  colnames(mba$z)=mba$y
+  df2=melt(mba$z, varnames = c('x', 'y'))
+
+
+  ODV_colours <- c("#000ba3","#021fe7","#0345fe","#0076ff","#0691fe","#0aa0fd","#0daffc","#6fd2ff","#a5e5fe","#d3f3ff",
+                 "#ffffff","#fef9d2","#ffde62","#ffc105","#ffa500","#ff7d01","#f92d00","#e92400","#d81d00","#c51301","#b00d00") 
+
+
+  st_2 <- ggplot(data = df2, aes(x = x, y = y))+
+  geom_raster(aes(fill = value),breaks=seq(-8,8,0.5),limits=c(-8,8))+
+  geom_contour_fill(aes(z = value), binwidth = 1, alpha = 0.35)+
+  geom_contour(aes(z = value), breaks =seq(-8,8,1),limits=c(-8,8), colour =  "black")+geom_text_contour(aes(z = value),stroke   = 0.1,skip=0,check_overlap=T,size=3) +
+  scale_fill_gradientn(colours = (ODV_colours),breaks=seq(-8,8,1),limits=c(-8,8))+
+  labs(y = "Profundidad (m)", x = "Mes", fill = "Temp. (°C)") +
+  scale_y_reverse(breaks = seq(0,400,50),limits=c(400,0))+
+  scale_x_continuous(breaks=c(15.5,45.5,75.5,106,136.5,167,197.5,228.5,259,289.5,320,350.5),labels=c("Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","sep","oct","Nov","Dic"))+ggtitle(paste0("Anomalía Temperatura Subsuperficial Boya ",substr(path2,4,9)[k]))+
+  theme(plot.title = element_text(hjust = 0.5,face="bold"))+theme(panel.border = element_blank(), panel.background = element_blank())+guides(fill = guide_colourbar(barwidth = 1.5, barheight = 15)) +
+  geom_contour_fill(aes(z = value), binwidth = 30, colour = "black", alpha = 0)
+  
+  gpl5[[k]] <- st_1
+  gpl6[[k]] <- st_2
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+#########################Niño 3.4
+
+path3 <- c(vec3)[1:45]
+gpl9 <- list()
+gpl10 <- list()
+
+###############################Niño 3.4
+for (k in 1:length(path3)) {
+  
+  data<- nc_open(path3[k])
+  
+  if (substr(path3[k], start = 1, stop = 3) == "iso"){
+    nc <- ncvar_get(data,"ISO_6")
+    }else if(substr(path3[k], start = 1, stop = 3) == "dyn"){
+    nc <- ncvar_get(data,"DYN_13")
+    }else{
+      nc <- ncvar_get(data,"WU_422")
+    }
+  
+
+  time <- ncvar_get(data,"time")
+  tunits <- ncatt_get(data, "time", "units")[[2]]
+  ini <- substr(tunits,start = 12, stop = 21)
+  time <- as.Date(ini) + time
+  df <- data.frame(time,nc)
+  
+  clim <- df %>% filter(time<="2020-12-31") %>%
+    mutate(mes = as.numeric(format(time,'%m')),
+           dia = as.numeric(format(time,'%d'))) %>%
+    group_by(mes,dia) %>%
+    summarise(nc= mean(nc,na.rm = T))
+  clim <- data.frame(clim)
+  
+  Fecha = seq(as.Date("0000-01-01"),as.Date("0000-12-31"),by="day")
+  clim <- data.frame(Fecha,clim)
+  clim2[[k]] <- clim
+  yl <- c(rep("Isoterma 20ºC",15),rep("Altura dinámica (cm)",15),rep("Viento zonal (m/s)",15))
+  
+  clim <- clim[-60,]
+  act <- df[df$time >= "2023-01-01",]
+  colnames(act) <- c("Fecha","nc")
+  dt <- data.frame(clim, a2023=data.frame(c(act$nc,rep(NA,365-length(act$nc)))))
+  colnames(dt)[c(4,5)]<- c("Climatologia","Año_2023")
+  dt$anomalia<- dt$Año_2023-dt$Climatologia
+  
+  if (k <=15){
+  
+  graph <- ggplot(data=dt,aes(x= Fecha,y=Climatologia))+
+    geom_line(col="red")+
+    ggtitle(paste0("Boya ",yl[k]," ",substr(path3,4,9)[k] ))+theme_bw()+xlab("Fecha")+ylab("")+
+    geom_line(aes(x=Fecha,y=Año_2023),col="dodgerblue2")+scale_x_date(date_labels = "%b")+
+  theme(plot.title = element_text(hjust = 0.5))+ scale_y_continuous(breaks= seq(20,260,10))+ylim(c(260,20))
+  
+  graph2 <- ggplot(data=dt,aes(x= Fecha,y=anomalia))+
+    geom_hline(yintercept=0)+
+     ggtitle(paste0(" Anomalía Boya ",yl[k]," ",substr(path3,4,9)[k] ))+theme_bw()+xlab("Fecha")+ylab("")+
+    geom_line(aes(x=Fecha,y=anomalia),col="#008B00")+scale_x_date(date_labels = "%b")+
+     theme(plot.title = element_text(hjust = 0.5))+ scale_y_continuous(breaks= seq(-50,75,10))+ylim(c(75,-50)) 
+  }
+  
+  
+  if (k >=16 & k <=30){
+    graph <- ggplot(data=dt,aes(x= Fecha,y=Climatologia))+
+    geom_line(col="red")+
+    ggtitle(paste0("Boya ",yl[k]," ",substr(path3,4,9)[k] ))+theme_bw()+xlab("Fecha")+ylab("")+
+    geom_line(aes(x=Fecha,y=Año_2023),col="dodgerblue2")+scale_x_date(date_labels = "%b")+
+  theme(plot.title = element_text(hjust = 0.5))+ scale_y_continuous(breaks= seq(80,170,10))+ylim(c(80,170))
+    
+    graph2 <- ggplot(data=dt,aes(x= Fecha,y=anomalia))+
+    geom_hline(yintercept=0)+
+    ggtitle(paste0(" Anomalía Boya ",yl[k]," ",substr(path3,4,9)[k] ))+theme_bw()+xlab("Fecha")+ylab("")+
+    geom_line(aes(x=Fecha,y=anomalia),col="#008B00")+scale_x_date(date_labels = "%b")+
+  theme(plot.title = element_text(hjust = 0.5))+ scale_y_continuous(breaks= seq(-15,30,5))+ylim(c(-15,30))
+    
+    
+  }
+  if (k >=31){
+    graph <- ggplot(data=dt,aes(x= Fecha,y=Climatologia))+
+    geom_bar(fill="red",alpha=0.5,stat='identity')+
+    ggtitle(paste0("Boya ",yl[k]," ",substr(path,4,9)[k] ))+theme_bw()+xlab("Fecha")+ylab("")+
+    geom_bar(aes(x=Fecha,y=Año_2023),fill="dodgerblue2",alpha=0.5,stat='identity')+scale_x_date(date_labels = "%b")+
+  theme(plot.title = element_text(hjust = 0.5))+ coord_flip()+geom_vline(xintercept = 0,colour="red")+ scale_y_continuous(breaks= seq(-12,6,2))+ylim(c(-12,6))
+    
+    graph2 <- ggplot(data=dt,aes(x= Fecha,y=Año_2023-Climatologia))+
+    ggtitle(paste0("Anomalía Boya ",yl[k]," ",substr(path3,4,9)[k] ))+theme_bw()+xlab("Fecha")+ylab("")+
+    geom_bar(aes(x=Fecha,y=Año_2023-Climatologia),fill="#008B00",alpha=0.5,stat='identity')+scale_x_date(date_labels = "%b")+
+  theme(plot.title = element_text(hjust = 0.5))+ coord_flip()+geom_hline(yintercept = 0,colour="red")+ scale_y_continuous(breaks= seq(-10,10,2))+ylim(c(-10,10))
+  
+  }
+  
+  gpl11 <- partial_bundle(toWebGL(ggplotly(graph)))
+  gpl12 <- partial_bundle(toWebGL(ggplotly(graph2)))
+  gpl9[[k]] <- gpl11
+  gpl10[[k]] <- gpl12
+}
+
+
+
+path3 <- c(vec3)
+
+for (k in c(46:53, 55:57,59:60)){
+  library(tidyverse)  
+  library(lubridate)
+  library(cowplot)
+  library(reshape2)
+  library(MBA)
+  library(metR)
+  library(ncdf4)
+  library(stringi)
+
+### ARCHIVO
+  n=nc_open(path3[k])
+  TEMP=ncvar_get(n, varid="T_20")
+  depth=ncvar_get(n, varid="depth")
+
+  row.names(TEMP)=depth
+
+  time <- ncvar_get(n,"time")
+  tunits <- ncatt_get(n, "time", "units")[[2]]
+  ini <- substr(tunits,start = 12, stop = 21)
+  FECHA <- as.Date(ini) + time
+
+
+  TEMP<- as.data.frame(t(TEMP))
+  TEMP=cbind(FECHA,TEMP)
+
+  df=TEMP
+  sapply(df,class)
+  cols <- names(df)[2:ncol(df)]
+  df[cols] <- lapply(df[cols], as.numeric)
+
+  str(df)
+#pivot table
+  df=df %>% filter(FECHA<="2020-12-31") %>%
+  group_by(month = month(FECHA), day = day(FECHA)) %>%
+  summarise_if(is.numeric, mean , na.rm=TRUE)
+
+  df[1:2]=NULL
+  df <- data.frame(df)
+  prof=as.numeric(dim(df)[2])
+
+  sub= subset(TEMP, FECHA>="2023-01-01" & FECHA<=Sys.Date()-2 )
+  a <- length(sub$FECHA)
+  length(sub)
+  sub[1]= NULL
+
+  profund=as.numeric(dim(sub)[2])    #numero de profundidades
+
+  SECCION=melt(sub, id=0)
+  colnames(SECCION)=c("PROFUNDIDAD","TEMPERATURA")
+  SECCION$PROFUNDIDAD<-stri_replace_first_regex(SECCION$PROFUNDIDAD, "[X]", "")
+  SECCION$PROFUNDIDAD=as.numeric(SECCION$PROFUNDIDAD)
+  SECCION$DIA=rep(1:a,profund)
+  SECCION=na.omit(SECCION)
+  col_order <- c("DIA","PROFUNDIDAD","TEMPERATURA")
+  SECCION2 <- SECCION[, col_order]
+
+#interpolacion
+#Numero de pixeles
+  mba.int <- mba.surf(SECCION2, no.X = 300, no.Y = 300, extend = T)
+  mba=mba.int$xyz.est
+  rownames(mba$z)=mba$x
+  colnames(mba$z)=mba$y
+  df2=melt(mba$z, varnames = c('x', 'y'))
+
+#ESCALA DE COLORES
+  ODV_colours <-c(
+  "#feb483", "#d31f2a", "#ff8400","#ffc000", "#27ab19", "#0db5e6", "#7139fe", "#d16cfa"
+)
+
+
+#GRAFICO
+  st_1 <- ggplot(data = df2, aes(x = x, y = y)) +
+  geom_raster(aes(fill = value),breaks=seq(6,32,1),limits=c(6,32)) +
+  geom_contour_fill(aes(z = value), binwidth = 1, alpha = 0.35)+
+  geom_contour(aes(z = value), breaks =seq(6,32,2),limits=c(6,32), colour =  "black")+geom_text_contour(aes(z = value),stroke   = 0.1,skip=0,check_overlap=T,size=3) +
+  scale_fill_gradientn(colours = rev(ODV_colours),breaks=seq(6,32,2),limits=c(6,32))+
+  labs(y = "Profundidad (m)", x = "Mes", fill = "Temp. (°C)") +
+  scale_y_reverse(breaks = seq(0,400,50),limits=c(400,0))+
+  scale_x_continuous(breaks=c(15.5,45.5,75.5,106,136.5,167,197.5,228.5,259,289.5,320,350.5),labels=c("Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","sep","oct","Nov","Dic"))+ggtitle(paste0("Temperatura Subsuperficial Boya ",substr(path3,4,9)[k]))+
+  theme(plot.title = element_text(hjust = 0.5,face="bold"))+theme(panel.border = element_blank(), panel.background = element_blank())+guides(fill = guide_colourbar(barwidth = 1.5, barheight = 15))+
+  geom_contour_fill(aes(z = value), binwidth = 30, colour = "black", alpha = 0) 
+
+  df <- df[-60,]
+  anom <- sub-df[1:(length(sub[,1])),]
+
+
+  SECCION=melt(anom, id=0)
+  colnames(SECCION)=c("PROFUNDIDAD","TEMPERATURA")
+  SECCION$PROFUNDIDAD<-stri_replace_first_regex(SECCION$PROFUNDIDAD, "[X]", "")
+  SECCION$PROFUNDIDAD=as.numeric(SECCION$PROFUNDIDAD)
+  SECCION$DIA=rep(1:a,profund)
+  SECCION=na.omit(SECCION)
+  col_order <- c("DIA","PROFUNDIDAD","TEMPERATURA")
+  SECCION2 <- SECCION[, col_order]
+
+#interpolacion
+#Numero de pixeles
+  mba.int <- mba.surf(SECCION2, no.X = 300, no.Y = 300, extend = T)
+  mba=mba.int$xyz.est
+  rownames(mba$z)=mba$x
+  colnames(mba$z)=mba$y
+  df2=melt(mba$z, varnames = c('x', 'y'))
+
+
+  ODV_colours <- c("#000ba3","#021fe7","#0345fe","#0076ff","#0691fe","#0aa0fd","#0daffc","#6fd2ff","#a5e5fe","#d3f3ff",
+                 "#ffffff","#fef9d2","#ffde62","#ffc105","#ffa500","#ff7d01","#f92d00","#e92400","#d81d00","#c51301","#b00d00") 
+
+
+  st_2 <- ggplot(data = df2, aes(x = x, y = y))+
+  geom_raster(aes(fill = value),breaks=seq(-8,8,0.5),limits=c(-8,8))+
+  geom_contour_fill(aes(z = value), binwidth = 1, alpha = 0.35)+
+  geom_contour(aes(z = value), breaks =seq(-8,8,1),limits=c(-8,8), colour =  "black")+geom_text_contour(aes(z = value),stroke   = 0.1,skip=0,check_overlap=T,size=3) +
+  scale_fill_gradientn(colours = (ODV_colours),breaks=seq(-8,8,1),limits=c(-8,8))+
+  labs(y = "Profundidad (m)", x = "Mes", fill = "Temp. (°C)") +
+  scale_y_reverse(breaks = seq(0,400,50),limits=c(400,0))+
+  scale_x_continuous(breaks=c(15.5,45.5,75.5,106,136.5,167,197.5,228.5,259,289.5,320,350.5),labels=c("Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","sep","oct","Nov","Dic"))+ggtitle(paste0("Anomalía Temperatura Subsuperficial Boya ",substr(path3,4,9)[k]))+
+  theme(plot.title = element_text(hjust = 0.5,face="bold"))+theme(panel.border = element_blank(), panel.background = element_blank())+guides(fill = guide_colourbar(barwidth = 1.5, barheight = 15)) +
+  geom_contour_fill(aes(z = value), binwidth = 30, colour = "black", alpha = 0)
+  
+  gpl9[[k]] <- st_1
+  gpl10[[k]] <- st_2
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+library(jsonlite)
+library(rvest)
+library(dplyr)
+
+setwd("C:/Users/ASUS/Desktop/CIO")
+
+# Leer el archivo txt
+json_txt <- readLines("est.txt", warn = FALSE)
+
+# Concatenar todas las líneas del archivo en una sola cadena
+json_str <- paste(json_txt, collapse = "")
+
+# Convertir la cadena JSON en un data frame
+json_df <- fromJSON(json_str)
+station <- c("EL ALTO","PANANGA","MALLARES","LA ESPERANZA","BERNAL","AYABACA","JAYANCA")
+
+grafica <- list()
+tab <- NULL
+for (k in 1:length(station)){
+  tab <- rbind(tab,json_df[json_df$nom == station[k],])
+}  
+tab  
+
+for (j in 1:length(station)){
+  
+  est <- json_df[json_df$nom == station[j],]   
+  
+  m_n <-  format(Sys.Date(),'%m')
+  m_s <- ifelse(1:m_n <=9,paste0("0",1:m_n),1:m_n)
+  
+  ini <- NULL
+  
+  for (i in 1:m_n){
+    url <- paste0("https://www.senamhi.gob.pe/mapas/mapa-estaciones-2/_dato_esta_tipo02.php?estaciones=",est$cod,"&CBOFiltro=2023",m_s[i],"&t_e=",est$ico,"&estado=",est$estado,"&cod_old=&cate_esta=",est$cate)
+    
+    pagina <- read_html(url) 
+    
+    # Extrae la tabla de datos
+    data <- html_nodes(pagina, "table")[[2]]
+    
+    fecha <- html_table(data, header = T)[[1]][-1]
+    pp <- html_table(data, header = T)[[5]][-1]
+    
+    ini <- rbind(ini,data.frame(Fecha =as.Date(fecha),pp =as.numeric(pp)))
+  }
+  ini[ini < 0] <- NA
+  grafica[[j]] <- partial_bundle(toWebGL(ggplotly(ggplot(ini,aes(Fecha,pp))+
+                        geom_col(col="blue",fill="blue")+
+                        theme_bw()+
+                        ggtitle(paste0(j,". Precipitación Estación: ",station[j]," (mm)"))+
+                        ylab("Precipitación (mm)")+
+                          theme(plot.title = element_text(hjust=0.5))+
+                          ylim(0,120))))
+  
+  
+}
+
+
+me <- format(Sys.Date()-1,'%m')
+d <- format(Sys.Date()-1,'%d')
+Y <- format(Sys.Date()-1,'%Y')
+
+
+#out_dir <- setwd("C:/Users/ASUS/Desktop/CIO")
+
+#command <- paste('python -m motuclient --motu https://nrt.cmems-du.eu/motu-web/Motu --service-id SST_GLO_SST_L4_NRT_OBSERVATIONS_010_001-TDS --product-id METOFFICE-GLO-SST-L4-NRT-OBS-SST-V2 --date-min',Sys.Date()-1,"00:00:00","--date-max ",Sys.Date()-1,"23:59:59","--variable analysed_sst --out-dir", out_dir, '--out-name', "data.nc","--user","vdiaz","--pwd","Vlad1999",sep=" ")
+
+#system(command,intern=T)
+
+#library(remotes)
+library(raster)
+#da <- raster("da.nc",var="analysed_sst")
+library(paletteer)
+
+
+
+floats <- c(5906012,6902961,6902963,6903000,6903002,6903003)
+map_all <- list()
+map_only <- list()
+ft1 <- list()
+ft2 <- list()
+library(argoFloats)
+#Libreria para ploteo de mapas oceanogr?ficos
+library(oce)
+
+
+for (i in 1:length(floats)){
+  index1 <- getIndex(destdir="data/argo")
+  #se escoge el flotador, codigo de 7 digitos
+  ID0 <- floats[i]
+  
+  #descaga de datos del flotador
+  index0 <- subset(index1, ID=ID0)
+  
+  
+  index0 <- subset(index0,time=list(from="2023-02-01",to="2023-08-17"))
+  #seleccion de longitudes
+  lon <- index0[["longitude"]]
+  #seleccion de latitudes
+  lat <- index0[["latitude"]]
+  #total de ciclos
+  cycle <- index0[['cycle']]
+  #Fechas
+  t <- index0[["date"]]
+  #par(mar=c(2,2,1,1))
+  library(argoFloats)
+  #install.packages("marmap")
+  library(oce)
+  library(marmap)
+  
+  #par(mar=c(2,2,1,1))
+  
+  
+  df <- data.frame(cycle=cycle, time=t,lat=lat,lon=lon)
+  
+  library(metR)
+  library(data.table)
+  library(sf)
+  library(maps)
+  library(maptools)
+  
+  
+  library("rnaturalearth")
+  library("rnaturalearthdata")
+  
+  world <- ne_countries(scale = "medium",continent='south america', returnclass = "sf")
+  library(sp)      
+  library(sf)
+  #install.packages("ggfortify")
+  library(ggfortify)
+  df$time <- as.Date(df$time,format="%y-%m-%d")  
+  
+  m1 <- ggplot(data=world) +geom_sf()+
+    geom_rect(
+      aes(xmin = -90, xmax = -80, ymin = -10, ymax = 0),
+      fill = NA,col="black",size=1
+    )+geom_text(aes(x = -85, y = 1.2),size=5, label = "Niño 1+2", stat = "unique",color = "black")+
+    theme_bw()+geom_point(data=df,aes(x=lon,y=lat,col=time))+
+    theme(plot.title=element_text(hjust=0.5),legend.key.height = unit(2,"cm"))+ theme(panel.grid.major = element_line(color = gray(.5), linetype = "dashed", size = 0.5), panel.background = element_rect(fill = "aliceblue"))+ coord_sf(xlim = c(-92, -66), ylim = c(-20,5), expand = FALSE) +
+    #+scale_color_gradientn(colours = rainbow(5))  +
+    geom_path(data=df,aes(x = lon, y = lat,col=time)) + guides(fill = guide_colourbar(ticks = FALSE))+ggtitle(paste0("Posición Argo Float ",floats[i]))+xlab("Longitud")+ylab("Latitud")+
+    scale_color_gradient(low = "red", high = "green", name = "Fecha", 
+                         labels = format(seq(min(df$time), max(df$time), by = "month"), "%b-%Y"),
+                         breaks= seq(min(df$time),max(df$time), by = "month"))
+  
+  
+  map_only[[i]] <- m1
+  
+  m2 <- ggplot(data=world) +
+    geom_sf()+theme_bw() + 
+    geom_path(data=df,aes(x = lon, y = lat,col=time),col="black",shape=0.8)+geom_point(data=df,aes(x=lon,y=lat,col=time))+
+    theme(plot.title=element_text(hjust=0.5),legend.key.height = unit(2,"cm"))+ theme(panel.grid.major = element_line(color = gray(.5), linetype = "dashed", size = 0.5), panel.background = element_rect(fill = "aliceblue"))+ coord_sf(xlim = c(min(df$lon)-0.5, max(df$lon)+0.5), ylim = c(min(df$lat)-0.5, max(df$lat)+0.5), expand = FALSE) +
+    #+scale_color_gradientn(colours = rainbow(5))  +
+    scale_color_gradient(low = "red", high = "green", name = "Fecha", 
+                         labels = format(seq(min(df$time), max(df$time), by = "month"), "%b-%Y"),
+                         breaks= seq(min(df$time),max(df$time), by = "month"))+ggtitle(paste0("Recorrido Argo Float ",floats[i]))+xlab("Longitud")+ylab("Latitud")
+  
+  map_all[[i]] <- ggplotly(m2)
+  
+  
+  #########Graph
+  
+  
+  
+  
+  cycle <- index0[['cycle']]
+  time <- index0[["time"]]
+  
+  index1 <- subset(index0,c(length(cycle)))
+  index2 <- subset(index0,c(length(cycle)-1))
+  index3 <- subset(index0,c(length(cycle)-2))
+  index4 <- subset(index0,c(length(cycle)-3))
+  
+  index5 <- subset(index0,c(length(cycle)-4))
+  index6 <- subset(index0,c(length(cycle)-5))
+  index7 <- subset(index0,c(length(cycle)-6))
+  index8 <- subset(index0,c(length(cycle)-7))
+  
+  
+  
+  profiles <- getProfiles(index1,destdir="data/argo")
+  argos <- readProfiles(profiles,destdir="data/argo")
+  argosClean <- applyQC(argos)
+  #plot(argosClean, which="profile", type="l",col=c("red"),ylim=c(500,0),xlim=c(8,28))
+  
+  profiles <- getProfiles(index2,destdir="data/argo")
+  argos <- readProfiles(profiles,destdir="data/argo")
+  argosClean2 <- applyQC(argos)
+  
+  profiles <- getProfiles(index3,destdir="data/argo")
+  argos <- readProfiles(profiles,destdir="data/argo")
+  argosClean3 <- applyQC(argos)
+  #plot(argosClean, which="profile", type="l",col=c("red"),ylim=c(500,0),xlim=c(8,28))
+  
+  profiles <- getProfiles(index4,destdir="data/argo")
+  argos <- readProfiles(profiles,destdir="data/argo")
+  argosClean4 <- applyQC(argos)
+  
+  profiles <- getProfiles(index5,destdir="data/argo")
+  argos <- readProfiles(profiles,destdir="data/argo")
+  argosClean5 <- applyQC(argos)
+  
+  profiles <- getProfiles(index6,destdir="data/argo")
+  argos <- readProfiles(profiles,destdir="data/argo")
+  argosClean6 <- applyQC(argos)
+  
+  profiles <- getProfiles(index7,destdir="data/argo")
+  argos <- readProfiles(profiles,destdir="data/argo")
+  argosClean7 <- applyQC(argos)
+  
+  profiles <- getProfiles(index8,destdir="data/argo")
+  argos <- readProfiles(profiles,destdir="data/argo")
+  argosClean8 <- applyQC(argos)
+  
+  
+  
+  cycle1 <- data.frame(temp=argosClean[["temperature"]][[1]][,1],sal=argosClean[["salinity"]][[1]][,1],pres=argosClean[["pressure"]][[1]][,1],oxygen = ifelse(sum(argosClean[["oxygen"]][[1]][,1])==0,0, argosClean[["oxygen"]][[1]][,1]))
+  
+  cycle2 <- data.frame(temp=argosClean2[["temperature"]][[1]][,1],sal=argosClean2[["salinity"]][[1]][,1],pres=argosClean2[["pressure"]][[1]][,1],oxygen = ifelse(sum(argosClean2[["oxygen"]][[1]][,1])==0,0, argosClean2[["oxygen"]][[1]][,1]))
+  
+  cycle3 <- data.frame(temp=argosClean3[["temperature"]][[1]][,1],sal=argosClean3[["salinity"]][[1]][,1],pres=argosClean3[["pressure"]][[1]][,1],oxygen = ifelse(sum(argosClean3[["oxygen"]][[1]][,1])==0,0, argosClean3[["oxygen"]][[1]][,1]))
+  
+  cycle4 <- data.frame(temp=argosClean4[["temperature"]][[1]][,1],sal=argosClean4[["salinity"]][[1]][,1],pres=argosClean4[["pressure"]][[1]][,1],oxygen = ifelse(sum(argosClean4[["oxygen"]][[1]][,1])==0,0, argosClean4[["oxygen"]][[1]][,1]))
+  
+  cycle5 <- data.frame(temp=argosClean5[["temperature"]][[1]][,1],sal=argosClean5[["salinity"]][[1]][,1],pres=argosClean5[["pressure"]][[1]][,1],oxygen = ifelse(sum(argosClean5[["oxygen"]][[1]][,1])==0,0, argosClean5[["oxygen"]][[1]][,1]))
+  
+  cycle6 <- data.frame(temp=argosClean6[["temperature"]][[1]][,1],sal=argosClean6[["salinity"]][[1]][,1],pres=argosClean6[["pressure"]][[1]][,1],oxygen = ifelse(sum(argosClean6[["oxygen"]][[1]][,1])==0,0, argosClean6[["oxygen"]][[1]][,1]))
+  
+  cycle7 <- data.frame(temp=argosClean7[["temperature"]][[1]][,1],sal=argosClean7[["salinity"]][[1]][,1],pres=argosClean7[["pressure"]][[1]][,1],oxygen = ifelse(sum(argosClean7[["oxygen"]][[1]][,1])==0,0, argosClean7[["oxygen"]][[1]][,1]))
+  
+  cycle8 <- data.frame(temp=argosClean8[["temperature"]][[1]][,1],sal=argosClean8[["salinity"]][[1]][,1],pres=argosClean8[["pressure"]][[1]][,1],oxygen = ifelse(sum(argosClean8[["oxygen"]][[1]][,1])==0,0, argosClean8[["oxygen"]][[1]][,1]))
+  
+  library(tidyverse)
+  
+  
+  ####Temperaturas
+  t1 <- ggplot()+ 
+    geom_path(data=cycle1,aes(x = temp, y = pres,col=substr(time,1,10)[length(cycle)]),size=1)+
+    geom_path(data=cycle2,aes(x = temp, y = pres,col=substr(time,1,10)[length(cycle)-1]),size=1)+
+    geom_path(data=cycle3,aes(x = temp, y = pres,col=substr(time,1,10)[length(cycle)-2]),size=1)+
+    geom_path(data=cycle4,aes(x = temp, y = pres,col=substr(time,1,10)[length(cycle)-3]),size=1)+xlab("Temperatura (°C)")+ylab("Presión (dbar)")+ggtitle(paste0("Temperatura vs Presión Argo float ",floats[i]))+theme_bw()+theme(plot.title = element_text(hjust = 0.5))+scale_y_reverse(breaks = seq(0,500,50),limits=c(500,0))+scale_x_continuous(breaks = seq(7,29,2),limits=c(7,29))+labs(color="")+labs(color="")+scale_color_brewer(palette='Paired')
+  
+  
+  t2 <- ggplot(cycle5, aes(x = temp, y = pres))+ 
+    geom_path(data=cycle5,aes(x = temp, y = pres,col=substr(time,1,10)[length(cycle)-4]),size=1)+
+    geom_path(data=cycle6,aes(x = temp, y = pres,col=substr(time,1,10)[length(cycle)-5]),size=1)+
+    geom_path(data=cycle7,aes(x = temp, y = pres,col=substr(time,1,10)[length(cycle)-6]),size=1)+
+    geom_path(data=cycle8,aes(x = temp, y = pres,col=substr(time,1,10)[length(cycle)-7]),size=1)+xlab("Temperatura (°C)")+ylab("Presión (dbar)")+ggtitle(paste0("Temperatura vs Presión Argo float ",floats[i]))+theme_bw()+theme(plot.title = element_text(hjust = 0.5))+scale_y_reverse(breaks = seq(0,500,50),limits=c(500,0))+scale_x_continuous(breaks = seq(7,29,2),limits=c(7,29))+labs(color="")+scale_color_brewer(palette='Set1')
+  
+  ft1[[i]] <- ggplotly(t1)
+  ft2[[i]]  <- ggplotly(t2)
+  
+
+}
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+# Mapa boyas
+
+### Proyecto de Monitoreo ENSO
+
+Boyas monitoreadas de las regiones Niño 3, 3.4 y 4 de la red  TAO/TRITON
+
+### Mapa Boyas {data-icon="fa-buoy"}
+
+```{r map}
+lat2 <- c("5ºN","2ºN","0ºN","2ºS","5ºS","5ºN","2ºN","0ºN","2ºS","5ºS","5ºN","2ºN","0ºN","2ºS","5ºS","5ºN","2ºN","0ºN","2ºS","5ºS","5ºN","2ºN","0ºN","2ºS","5ºS","5ºN","2ºN","0ºN","2ºS","5ºS","5ºN","2ºN","0ºN","2ºS","5ºS","5ºN","2ºN","0ºN","2ºS","5ºS")
+lon <- c(rep(-195,5),rep(-180,5),rep(-170,5),rep(-155,5),rep(-140,5),rep(-125,5),rep(-110,5),rep(-95,5))
+lon2 <- c(rep("165ºE",5),rep("180ºW",5),rep("170ºW",5),rep("155ºW",5),rep("140ºW",5),rep("125ºW",5),rep("110ºW",5),rep("95ºW",5))
+lat <- c(c(5,2,0,-2,-5),c(5,2,0,-2,-5),c(5,2,0,-2,-5),c(5,2,0,-2,-5),c(5,2,0,-2,-5),c(5,2,0,-2,-5),c(5,2,0,-2,-5),c(5,2,0,-2,-5))
+
+
+
+#lon3 <- c(rep(-110,5),rep(-95,5))
+#lon4 <- c(rep("110ºW",5),rep("95ºW",5))
+#lat3 <- c(c(5,2,0,-2,-5),c(5,2,0,-2,-5))
+
+#lon5 <- c(rep(-155,5),rep(-140,5),rep(-125,5))
+#lon6 <- c(rep("155ºW",5),rep("140ºW",5),rep("125ºW",5))#
+#lat4 <- c("5ºN","2ºN","0ºN","2ºS","5ºS","5ºN","2ºN","0ºN","2ºS","5ºS")
+
+
+
+
+
+
+leaflet() %>%
+  addProviderTiles('Esri.WorldImagery', options = providerTileOptions())%>% setView(lng=-140, lat=9, zoom=2) %>%addPolylines(lng =c(-360,360), lat = c(0,0),color="black",label="Línea ecuatorial 0º",popup="Línea ecuatorial 0º")%>% addRectangles(
+      lng1=-150, lat1=5,
+      lng2=-90, lat2=-5,
+      fillColor = "transparent",label="Región Niño 3",popup="Región Niño 3",color="blue")%>% addRectangles(
+      lng1=-90, lat1=0,
+      lng2=-80, lat2=-10,
+      fillColor = "transparent",label="Región Niño 1+2",popup="Región Niño 1+2",color="green")%>% addRectangles(
+        lng1=-200, lat1=5,
+        lng2=-150, lat2=-5,
+        fillColor = "transparent",label="Región Niño 4",popup="Región Niño 4",color="red")%>% addRectangles(
+          lng1=-170, lat1=5,
+          lng2=-120, lat2=-5,
+          fillColor = "transparent",label="Región Niño 3.4",popup="Región Niño 3.4",color="orange")%>% 
+  addMiniMap(toggleDisplay = T) %>% 
+  addLayersControl(overlayGroups = c('Círculos',"Edición","Icon","Polígono","Línea")) %>%
+  addSearchFeatures(
+    targetGroups = c('Círculos',"Edición","Icon","Línea","Polígono"),
+    options = searchFeaturesOptions(
+      zoom=25, openPopup = TRUE, firstTipSubmit = TRUE,
+      autoCollapse = TRUE, hideMarkerOnCollapse = TRUE
+    )
+  )%>%
+  addMeasure(primaryLengthUnit = "meters",
+             secondaryLengthUnit = "kilometers",
+             primaryAreaUnit = "hectares",
+             secondaryAreaUnit = "sqmeters",
+             activeColor = "red",
+             completedColor = "red")%>%addCircleMarkers(lat = lat, lng =lon, weight = 5, radius = 10,popup = paste0("Boya ",lat2," ",lon2),label = paste0("Boya ",lat2," ",lon2),color = "red", fillOpacity = 0.5,group="Círculos")%>%
+  addMarkers(lat=lat,
+             lng=lon,
+             group= "Icon",popup = paste0("Boya ",lat2," ",lon2),label = paste0("Boya ",lat2," ",lon2))%>%
+  addPolylines(lat=lat,
+               lng=lon,
+               color = 'red',
+               group = 'Línea') %>%
+  addPolygons(lat=lat,
+              lng=lon,
+              color="green",
+              fillColor = 'green',
+              fillOpacity = 0.6,
+              group = 'Polígono')%>%
+  hideGroup(c("Línea","Polígono"))%>% 
+  addDrawToolbar(targetGroup = "Edición",editOptions = editToolbarOptions(selectedPathOptions = selectedPathOptions))%>%addStyleEditor()
+
+
+```
+
+
+# Temperatura Subsuperficial ºC {data-navmenu="Niño 4 Boyas"}
+
+
+## Column
+
+### Boya 5ºN 165ºE
+
+```{r f1, fig.width=5, fig.height=9}
+gpl2[[46]]/gpl4[[46]]
+```
+
+### Boya 2ºN 165ºE
+
+```{r f2, fig.width=5, fig.height=9}
+gpl2[[47]]/gpl4[[47]]
+
+```
+
+### Boya 0ºN 165ºE
+
+```{r f3, fig.width=5, fig.height=9}
+gpl2[[48]]/gpl4[[48]]
+
+```
+
+### Boya 2ºS 165ºE
+
+```{r f4, fig.width=5, fig.height=9}
+gpl2[[49]]/gpl4[[49]]
+
+```
+
+### Boya 5ºS 165ºE
+
+```{r f5, fig.width=5, fig.height=9}
+gpl2[[50]]/gpl4[[50]]
+
+```
+
+## Column
+
+### Boya 5ºN 180ºW
+
+```{r f6, fig.width=5, fig.height=9}
+gpl2[[51]]/gpl4[[51]]
+
+```
+
+### Boya 2ºN 180ºW
+
+```{r f7, fig.width=5, fig.height=9}
+gpl2[[52]]/gpl4[[52]]
+
+```
+
+### Boya 0ºN 180ºW
+
+```{r f8, fig.width=5, fig.height=9}
+gpl2[[53]]/gpl4[[53]]
+
+```
+
+### Boya 2ºS 180ºW
+
+```{r f9, fig.width=5, fig.height=9}
+gpl2[[54]]/gpl4[[54]]
+
+```
+
+### Boya 5ºS 180ºW
+
+```{r f10, fig.width=5, fig.height=9}
+gpl2[[55]]/gpl4[[55]]
+
+```
+
+## Column
+
+### Boya 5ºN 170ºW
+
+```{r f11, fig.width=5, fig.height=9}
+gpl2[[56]]/gpl4[[56]]
+
+```
+
+### Boya 2ºN 170ºW
+
+```{r f12, fig.width=5, fig.height=9}
+gpl2[[57]]/gpl4[[57]]
+
+```
+
+### Boya 0ºN 170ºW
+
+```{r f13, fig.width=5, fig.height=9}
+gpl2[[58]]/gpl4[[58]]
+
+```
+
+### Boya 2ºS 170ºW
+
+```{r f14, fig.width=5, fig.height=9}
+gpl2[[59]]/gpl4[[59]]
+
+```
+
+### Boya 5ºS 170ºW
+
+```{r f15, fig.width=5, fig.height=9}
+gpl2[[60]]/gpl4[[60]]
+
+```
+
+
+
+
+
+
+# Isoterma 20 ºC {data-navmenu="Niño 4 Boyas"}
+
+Color azul: Año 2023, color rojo: climatología, color verde: anomalía 2023
+
+## Column
+
+### Boya 5ºN 165ºE
+
+```{r}
+subplot(gpl2[[1]],gpl4[[1]])
+```
+
+### Boya 2ºN 165ºE
+
+```{r}
+subplot(gpl2[[2]],gpl4[[2]])
+
+```
+
+### Boya 0ºN 165ºE
+
+```{r}
+subplot(gpl2[[3]],gpl4[[3]])
+
+```
+
+### Boya 2ºS 165ºE
+
+```{r}
+subplot(gpl2[[4]],gpl4[[4]])
+
+```
+
+### Boya 5ºS 165ºE
+
+```{r}
+subplot(gpl2[[5]],gpl4[[5]])
+
+```
+
+## Column
+
+### Boya 5ºN 180ºW
+
+```{r}
+subplot(gpl2[[6]],gpl4[[6]])
+
+```
+
+### Boya 2ºN 180ºW
+
+```{r}
+subplot(gpl2[[7]],gpl4[[7]])
+
+```
+
+### Boya 0ºN 180ºW
+
+```{r}
+subplot(gpl2[[8]],gpl4[[8]])
+
+```
+
+### Boya 2ºS 180ºW
+
+```{r}
+subplot(gpl2[[9]],gpl4[[9]])
+
+```
+
+### Boya 5ºS 180ºW
+
+```{r}
+subplot(gpl2[[10]],gpl4[[10]])
+
+```
+
+## Column
+
+### Boya 5ºN 170ºW
+
+```{r}
+subplot(gpl2[[11]],gpl4[[11]])
+
+```
+
+### Boya 2ºN 170ºW
+
+```{r}
+subplot(gpl2[[12]],gpl4[[12]])
+
+```
+
+### Boya 0ºN 170ºW
+
+```{r}
+subplot(gpl2[[13]],gpl4[[13]])
+
+```
+
+### Boya 2ºS 170ºW
+
+```{r}
+subplot(gpl2[[14]],gpl4[[14]])
+
+```
+
+### Boya 5ºS 170ºW
+
+```{r}
+subplot(gpl2[[15]],gpl4[[15]])
+
+```
+
+# Altura dinámica {data-navmenu="Niño 4 Boyas"}
+
+Color azul: Año 2023, color rojo: climatología, color verde: anomalía 2023
+
+## Column
+
+### Boya 5ºN 165ºE
+
+```{r}
+subplot(gpl2[[16]],gpl4[[16]])
+
+```
+
+### Boya 2ºN 165ºE
+
+```{r}
+subplot(gpl2[[17]],gpl4[[17]])
+
+```
+
+### Boya 0ºN 165ºE
+
+```{r}
+subplot(gpl2[[18]],gpl4[[18]])
+
+```
+
+### Boya 2ºS 165ºE
+
+```{r}
+subplot(gpl2[[19]],gpl4[[19]])
+
+```
+
+### Boya 5ºS 165ºE
+
+```{r}
+subplot(gpl2[[20]],gpl4[[20]])
+
+```
+
+## Column
+
+### Boya 5ºN 180ºW
+
+```{r}
+subplot(gpl2[[21]],gpl4[[21]])
+
+```
+
+### Boya 2ºN 180ºW
+
+```{r}
+subplot(gpl2[[22]],gpl4[[22]])
+
+```
+
+### Boya 0ºN 180ºW
+
+```{r}
+subplot(gpl2[[23]],gpl4[[23]])
+
+```
+
+### Boya 2ºS 180ºW
+
+```{r}
+subplot(gpl2[[24]],gpl4[[24]])
+
+```
+
+### Boya 5ºS 180ºW
+
+```{r}
+subplot(gpl2[[25]],gpl4[[25]])
+
+```
+
+## Column
+
+### Boya 5ºN 170ºW
+
+```{r}
+subplot(gpl2[[26]],gpl4[[26]])
+
+```
+
+### Boya 2ºN 170ºW
+
+```{r}
+subplot(gpl2[[27]],gpl4[[27]])
+
+```
+
+### Boya 0ºN 170ºW
+
+```{r}
+subplot(gpl2[[28]],gpl4[[28]])
+
+```
+
+### Boya 2ºS 170ºW
+
+```{r}
+subplot(gpl2[[29]],gpl4[[29]])
+
+```
+
+### Boya 5ºS 170ºW
+
+```{r}
+subplot(gpl2[[30]],gpl4[[30]])
+
+```
+
+# Vientos {data-navmenu="Niño 4 Boyas"}
+
+Color azul: Año 2023, color rojo: climatología, color verde: anomalía 2023
+
+## Column
+
+### Boya 5ºN 165ºE
+
+```{r}
+subplot(gpl2[[31]],gpl4[[31]])
+
+```
+
+### Boya 2ºN 165ºE
+
+```{r}
+subplot(gpl2[[32]],gpl4[[32]])
+
+```
+
+### Boya 0ºN 165ºE
+
+```{r}
+subplot(gpl2[[33]],gpl4[[33]])
+
+```
+
+### Boya 2ºS 165ºE
+
+```{r}
+subplot(gpl2[[34]],gpl4[[34]])
+
+```
+
+### Boya 5ºS 165ºE
+
+```{r}
+subplot(gpl2[[35]],gpl4[[35]])
+
+```
+
+## Column
+
+### Boya 5ºN 180ºW
+
+```{r}
+subplot(gpl2[[36]],gpl4[[36]])
+
+```
+
+### Boya 2ºN 180ºW
+
+```{r}
+subplot(gpl2[[37]],gpl4[[37]])
+
+```
+
+### Boya 0ºN 180ºW
+
+```{r}
+subplot(gpl2[[38]],gpl4[[38]])
+
+```
+
+### Boya 2ºS 180ºW
+
+```{r}
+subplot(gpl2[[39]],gpl4[[39]])
+
+```
+
+### Boya 5ºS 180ºW
+
+```{r}
+subplot(gpl2[[40]],gpl4[[40]])
+
+```
+
+## Column
+
+### Boya 5ºN 170ºW
+
+```{r}
+subplot(gpl2[[41]],gpl4[[41]])
+
+```
+
+### Boya 2ºN 170ºW
+
+```{r}
+subplot(gpl2[[42]],gpl4[[42]])
+
+```
+
+### Boya 0ºN 170ºW
+
+```{r}
+subplot(gpl2[[43]],gpl4[[43]])
+
+```
+
+### Boya 2ºS 170ºW
+
+```{r}
+subplot(gpl2[[44]],gpl4[[44]])
+
+```
+
+### Boya 5ºS 170ºW
+
+```{r}
+subplot(gpl2[[45]],gpl4[[45]])
+
+```
+
+
+
+# Temperatura Subsuperficial ºC {data-navmenu="Niño 3-4 Boyas"}
+
+
+
+## Column
+
+### Boya 5ºN 155ºW
+
+```{r f16, fig.width=5, fig.height=9}
+gpl9[[46]]/gpl10[[46]]
+```
+
+### Boya 2ºN 155ºW
+
+```{r f17, fig.width=5, fig.height=9}
+gpl9[[47]]/gpl10[[47]]
+
+```
+
+### Boya 0ºN 155ºW
+
+```{r f18, fig.width=5, fig.height=9}
+gpl9[[48]]/gpl10[[48]]
+
+```
+
+### Boya 2ºS 155ºW
+
+```{r f19, fig.width=5, fig.height=9}
+gpl9[[49]]/gpl10[[49]]
+
+```
+
+### Boya 5ºS 155ºW
+
+```{r f20, fig.width=5, fig.height=9}
+gpl9[[50]]/gpl10[[50]]
+
+```
+
+## Column
+
+### Boya 5ºN 140ºW
+
+```{r f21, fig.width=5, fig.height=9}
+gpl9[[51]]/gpl10[[51]]
+
+```
+
+### Boya 2ºN 140ºW
+
+```{r f22, fig.width=5, fig.height=9}
+gpl9[[52]]/gpl10[[52]]
+
+```
+
+### Boya 0ºN 140ºW
+
+```{r f23, fig.width=5, fig.height=9}
+gpl9[[53]]/gpl10[[53]]
+
+```
+
+### Boya 2ºS 140ºW
+
+```{r f24, fig.width=5, fig.height=9}
+gpl9[[54]]/gpl10[[54]]
+
+```
+
+### Boya 5ºS 140ºW
+
+```{r f25, fig.width=5, fig.height=9}
+gpl9[[55]]/gpl10[[55]]
+
+```
+
+## Column
+
+### Boya 5ºN 125ºW
+
+```{r f26, fig.width=5, fig.height=9}
+gpl9[[56]]/gpl10[[56]]
+
+```
+
+### Boya 2ºN 125ºW
+
+```{r f27, fig.width=5, fig.height=9}
+gpl9[[57]]/gpl10[[57]]
+
+```
+
+### Boya 0ºN 125ºW
+
+```{r f28, fig.width=5, fig.height=9}
+gpl9[[58]]/gpl10[[58]]
+
+```
+
+### Boya 2ºS 125ºW
+
+```{r f29, fig.width=5, fig.height=9}
+gpl9[[59]]/gpl10[[59]]
+
+```
+
+### Boya 5ºS 125ºW
+
+```{r f30, fig.width=5, fig.height=9}
+gpl9[[60]]/gpl10[[60]]
+
+```
+
+
+
+
+# Isoterma 20 ºC {data-navmenu="Niño 3-4 Boyas"}
+
+Color azul: Año 2023, color rojo: climatología, color verde: anomalía 2023
+
+## Column
+
+### Boya 5ºN 155ºW
+
+```{r}
+subplot(gpl9[[1]],gpl10[[1]])
+```
+
+### Boya 2ºN 155ºW
+
+```{r}
+subplot(gpl9[[2]],gpl10[[2]])
+
+```
+
+### Boya 0ºN 155ºW
+
+```{r}
+subplot(gpl9[[3]],gpl10[[3]])
+
+```
+
+### Boya 2ºS 155ºW
+
+```{r}
+subplot(gpl9[[4]],gpl10[[4]])
+
+```
+
+### Boya 5ºS 155ºW
+
+```{r}
+subplot(gpl9[[5]],gpl10[[5]])
+
+```
+
+## Column
+
+### Boya 5ºN 140ºW
+
+```{r}
+subplot(gpl9[[6]],gpl10[[6]])
+
+```
+
+### Boya 2ºN 140ºW
+
+```{r}
+subplot(gpl9[[7]],gpl10[[7]])
+
+```
+
+### Boya 0ºN 140ºW
+
+```{r}
+subplot(gpl9[[8]],gpl10[[8]])
+
+```
+
+### Boya 2ºS 140ºW
+
+```{r}
+subplot(gpl9[[9]],gpl10[[9]])
+
+```
+
+### Boya 5ºS 140ºW
+
+```{r}
+subplot(gpl9[[10]],gpl10[[10]])
+
+```
+
+## Column
+
+### Boya 5ºN 125ºW
+
+```{r}
+subplot(gpl9[[11]],gpl10[[11]])
+
+```
+
+### Boya 2ºN 125ºW
+
+```{r}
+subplot(gpl9[[12]],gpl10[[12]])
+
+```
+
+### Boya 0ºN 125ºW
+
+```{r}
+subplot(gpl9[[13]],gpl10[[13]])
+
+```
+
+### Boya 2ºS 125ºW
+
+```{r}
+subplot(gpl9[[14]],gpl10[[14]])
+
+```
+
+### Boya 5ºS 125ºW
+
+```{r}
+subplot(gpl9[[15]],gpl10[[15]])
+
+```
+
+# Altura dinámica {data-navmenu="Niño 3-4 Boyas"}
+
+Color azul: Año 2023, color rojo: climatología, color verde: anomalía 2023
+
+## Column
+
+### Boya 5ºN 155ºW
+
+```{r}
+subplot(gpl9[[16]],gpl10[[16]])
+
+```
+
+### Boya 2ºN 155ºW
+
+```{r}
+subplot(gpl9[[17]],gpl10[[17]])
+
+```
+
+### Boya 0ºN 155ºW
+
+```{r}
+subplot(gpl9[[18]],gpl10[[18]])
+
+```
+
+### Boya 2ºS 155ºW
+
+```{r}
+subplot(gpl9[[19]],gpl10[[19]])
+
+```
+
+### Boya 5ºS 155ºW
+
+```{r}
+subplot(gpl9[[20]],gpl10[[20]])
+
+```
+
+## Column
+
+### Boya 5ºN 140ºW
+
+```{r}
+subplot(gpl9[[21]],gpl10[[21]])
+
+```
+
+### Boya 2ºN 140ºW
+
+```{r}
+subplot(gpl9[[22]],gpl10[[22]])
+
+```
+
+### Boya 0ºN 140ºW
+
+```{r}
+subplot(gpl9[[23]],gpl10[[23]])
+
+```
+
+### Boya 2ºS 140ºW
+
+```{r}
+subplot(gpl9[[24]],gpl10[[24]])
+
+```
+
+### Boya 5ºS 140ºW
+
+```{r}
+subplot(gpl9[[25]],gpl10[[25]])
+
+```
+
+## Column
+
+### Boya 5ºN 125ºW
+
+```{r}
+subplot(gpl9[[26]],gpl10[[26]])
+
+```
+
+### Boya 2ºN 125ºW
+
+```{r}
+subplot(gpl9[[27]],gpl10[[27]])
+
+```
+
+### Boya 0ºN 125ºW
+
+```{r}
+subplot(gpl9[[28]],gpl10[[28]])
+
+```
+
+### Boya 2ºS 125ºW
+
+```{r}
+subplot(gpl9[[29]],gpl10[[29]])
+
+```
+
+### Boya 5ºS 125ºW
+
+```{r}
+subplot(gpl9[[30]],gpl10[[30]])
+
+```
+
+# Vientos {data-navmenu="Niño 3-4 Boyas"}
+
+Color azul: Año 2023, color rojo: climatología, color verde: anomalía 2023
+
+## Column
+
+### Boya 5ºN 155ºW
+
+```{r}
+subplot(gpl9[[31]],gpl10[[31]])
+
+```
+
+### Boya 2ºN 155ºW
+
+```{r}
+subplot(gpl9[[32]],gpl10[[32]])
+
+```
+
+### Boya 0ºN 155ºW
+
+```{r}
+subplot(gpl9[[33]],gpl10[[33]])
+
+```
+
+### Boya 2ºS 155ºW
+
+```{r}
+subplot(gpl9[[34]],gpl10[[34]])
+
+```
+
+### Boya 5ºS 155ºW
+
+```{r}
+subplot(gpl9[[35]],gpl10[[35]])
+
+```
+
+## Column
+
+### Boya 5ºN 140ºW
+
+```{r}
+subplot(gpl9[[36]],gpl10[[36]])
+
+```
+
+### Boya 2ºN 140ºW
+
+```{r}
+subplot(gpl9[[37]],gpl10[[37]])
+
+```
+
+### Boya 0ºN 140ºW
+
+```{r}
+subplot(gpl9[[38]],gpl10[[38]])
+
+```
+
+### Boya 2ºS 140ºW
+
+```{r}
+subplot(gpl9[[39]],gpl10[[39]])
+
+```
+
+### Boya 5ºS 140ºW
+
+```{r}
+subplot(gpl9[[40]],gpl10[[40]])
+
+```
+
+## Column
+
+### Boya 5ºN 125ºW
+
+```{r}
+subplot(gpl9[[41]],gpl10[[41]])
+
+```
+
+### Boya 2ºN 125ºW
+
+```{r}
+subplot(gpl9[[42]],gpl10[[42]])
+
+```
+
+### Boya 0ºN 125ºW
+
+```{r}
+subplot(gpl9[[43]],gpl10[[43]])
+
+```
+
+### Boya 2ºS 125ºW
+
+```{r}
+subplot(gpl9[[44]],gpl10[[44]])
+
+```
+
+### Boya 5ºS 125ºW
+
+```{r}
+subplot(gpl9[[45]],gpl10[[45]])
+
+```
+
+
+
+# Temperatura Subsuperficial ºC {data-navmenu="Niño 3 Boyas"}
+
+
+
+## Column
+
+### Boya 5ºN 110ºW
+
+```{r f31, fig.width=5, fig.height=9}
+gpl5[[31]]/gpl6[[31]]
+```
+
+### Boya 2ºN 110ºW
+
+```{r f32, fig.width=5, fig.height=9}
+gpl5[[32]]/gpl6[[32]]
+
+```
+
+### Boya 0ºN 110ºW
+
+```{r f33, fig.width=5, fig.height=9}
+gpl5[[33]]/gpl6[[33]]
+
+```
+
+### Boya 2ºS 110ºW
+
+```{r f34, fig.width=5, fig.height=9}
+gpl5[[34]]/gpl6[[34]]
+
+```
+
+### Boya 5ºS 110ºW
+
+```{r f35, fig.width=5, fig.height=9}
+gpl5[[35]]/gpl6[[35]]
+
+```
+
+## Column
+
+### Boya 5ºN 95ºW
+
+```{r f36, fig.width=5, fig.height=9}
+gpl5[[36]]/gpl6[[36]]
+
+```
+
+### Boya 2ºN 95ºW
+
+```{r f37, fig.width=5, fig.height=9}
+gpl5[[37]]/gpl6[[37]]
+
+```
+
+### Boya 0ºN 95ºW
+
+```{r f38, fig.width=5, fig.height=9}
+gpl5[[38]]/gpl6[[38]]
+
+```
+
+### Boya 2ºS 95ºW
+
+```{r f39, fig.width=5, fig.height=9}
+gpl5[[39]]/gpl6[[39]]
+
+```
+
+### Boya 5ºS 95ºW
+
+```{r f40, fig.width=5, fig.height=9}
+gpl5[[40]]/gpl6[[40]]
+
+```
+
+
+# Isoterma 20 ºC {data-navmenu="Niño 3 Boyas"}
+
+Color azul: Año 2023, color rojo: climatología, color verde: anomalía 2023
+
+## Column
+
+### Boya 5ºN 110ºW
+
+```{r}
+subplot(gpl5[[1]],gpl6[[1]])
+```
+
+### Boya 2ºN 110ºW
+
+```{r}
+subplot(gpl5[[2]],gpl6[[2]])
+
+```
+
+### Boya 0ºN 110ºW
+
+```{r}
+subplot(gpl5[[3]],gpl6[[3]])
+
+```
+
+### Boya 2ºS 110ºW
+
+```{r}
+subplot(gpl5[[4]],gpl6[[4]])
+
+```
+
+### Boya 5ºS 110ºW
+
+```{r}
+subplot(gpl5[[5]],gpl6[[5]])
+
+```
+
+## Column
+
+### Boya 5ºN 95ºW
+
+```{r}
+subplot(gpl5[[6]],gpl6[[6]])
+
+```
+
+### Boya 2ºN 95ºW
+
+```{r}
+subplot(gpl5[[7]],gpl6[[7]])
+
+```
+
+### Boya 0ºN 95ºW
+
+```{r}
+subplot(gpl5[[8]],gpl6[[8]])
+
+```
+
+### Boya 2ºS 95ºW
+
+```{r}
+subplot(gpl5[[9]],gpl6[[9]])
+
+```
+
+### Boya 5ºS 95ºW
+
+```{r}
+subplot(gpl5[[10]],gpl6[[10]])
+
+```
+
+
+# Altura dinámica {data-navmenu="Niño 3 Boyas"}
+
+Color azul: Año 2023, color rojo: climatología, color verde: anomalía 2023
+
+## Column
+
+### Boya 5ºN 110ºW
+
+```{r}
+subplot(gpl5[[11]],gpl6[[11]])
+
+```
+
+### Boya 2ºN 110ºW
+
+```{r}
+subplot(gpl5[[12]],gpl6[[12]])
+
+```
+
+### Boya 0ºN 110ºW
+
+```{r}
+subplot(gpl5[[13]],gpl6[[13]])
+
+```
+
+### Boya 2ºS 110ºW
+
+```{r}
+subplot(gpl5[[14]],gpl6[[14]])
+
+```
+
+### Boya 5ºS 110ºW
+
+```{r}
+subplot(gpl5[[15]],gpl6[[15]])
+
+```
+
+## Column
+
+### Boya 5ºN 95ºW
+
+```{r}
+subplot(gpl5[[16]],gpl6[[16]])
+
+```
+
+### Boya 2ºN 95ºW
+
+```{r}
+subplot(gpl5[[17]],gpl6[[17]])
+
+```
+
+### Boya 0ºN 95ºW
+
+```{r}
+subplot(gpl5[[18]],gpl6[[18]])
+
+```
+
+### Boya 2ºS 95ºW
+
+```{r}
+subplot(gpl5[[19]],gpl6[[19]])
+
+```
+
+### Boya 5ºS 95ºW
+
+```{r}
+subplot(gpl5[[20]],gpl6[[20]])
+
+```
+
+
+# Vientos {data-navmenu="Niño 3 Boyas"}
+
+Color azul: Año 2023, color rojo: climatología, color verde: anomalía 2023
+
+## Column
+
+### Boya 5ºN 110ºW
+
+```{r}
+subplot(gpl5[[21]],gpl6[[21]])
+
+```
+
+### Boya 2ºN 110ºW
+
+```{r}
+subplot(gpl5[[22]],gpl6[[22]])
+
+```
+
+### Boya 0ºN 110ºW
+
+```{r}
+subplot(gpl5[[23]],gpl6[[23]])
+
+```
+
+### Boya 2ºS 110ºW
+
+```{r}
+subplot(gpl5[[24]],gpl6[[24]])
+
+```
+
+### Boya 5ºS 110ºW
+
+```{r}
+subplot(gpl5[[25]],gpl6[[25]])
+
+```
+
+## Column
+
+### Boya 5ºN 95ºW
+
+```{r}
+subplot(gpl5[[26]],gpl6[[26]])
+
+```
+
+### Boya 2ºN 95ºW
+
+```{r}
+subplot(gpl5[[27]],gpl6[[27]])
+
+```
+
+### Boya 0ºN 95ºW
+
+```{r}
+subplot(gpl5[[28]],gpl6[[28]])
+
+```
+
+### Boya 2ºS 95ºW
+
+```{r}
+subplot(gpl5[[29]],gpl6[[29]])
+
+```
+
+### Boya 5ºS 95ºW
+
+```{r}
+subplot(gpl5[[30]],gpl6[[30]])
+
+```
+
+# Float 5906012 {data-navmenu="Niño 1y2 Float"}
+
+## Column
+
+### Recorrido Float 5906012
+
+```{r }
+map_only[[1]]
+```
+
+### Temperatura Subsuperficial Últimos 4 ciclos
+
+```{r }
+ft1[[1]]
+```
+
+## Column
+
+### Ubicación Float 5906012
+```{r }
+map_all[[1]]
+```
+
+### Temperatura Subsuperficial Próximos 4 ciclos
+
+```{r }
+ft2[[1]]
+```
+
+
+# Float 6902961 {data-navmenu="Niño 1y2 Float"}
+
+## Column
+
+### Recorrido Float 6902961
+
+```{r }
+map_only[[2]]
+```
+
+### Temperatura Subsuperficial Últimos 4 ciclos
+
+```{r }
+ft1[[2]]
+```
+
+## Column
+
+### Ubicación Float 6902961
+```{r }
+map_all[[2]]
+```
+
+### Temperatura Subsuperficial Próximos 4 ciclos
+
+```{r }
+ft2[[2]]
+```
+
+
+# Float 6902963 {data-navmenu="Niño 1y2 Float"}
+
+## Column
+
+### Recorrido Float 6902963
+
+```{r }
+map_only[[3]]
+```
+
+### Temperatura Subsuperficial Últimos 4 ciclos
+
+```{r }
+ft1[[3]]
+```
+
+## Column
+
+### Ubicación Float 6902963
+```{r }
+map_all[[3]]
+```
+
+### Temperatura Subsuperficial Próximos 4 ciclos
+
+```{r }
+ft2[[3]]
+```
+
+
+# Float 6903000 {data-navmenu="Niño 1y2 Float"}
+
+## Column
+
+### Recorrido Float 6903000
+
+```{r }
+map_only[[4]]
+```
+
+### Temperatura Subsuperficial Últimos 4 ciclos
+
+```{r }
+ft1[[4]]
+```
+
+## Column
+
+### Ubicación Float 6903000
+```{r }
+map_all[[4]]
+```
+
+### Temperatura Subsuperficial Próximos 4 ciclos
+
+```{r }
+ft2[[4]]
+```
+
+
+# Float 6903002 {data-navmenu="Niño 1y2 Float"}
+
+## Column
+
+### Recorrido Float 6903002
+
+```{r }
+map_only[[5]]
+```
+
+### Temperatura Subsuperficial Últimos 4 ciclos
+
+```{r }
+ft1[[5]]
+```
+
+## Column
+
+### Ubicación Float 6903002
+```{r }
+map_all[[5]]
+```
+
+### Temperatura Subsuperficial Próximos 4 ciclos
+
+```{r }
+ft2[[5]]
+```
+
+
+# Float 6903003 {data-navmenu="Niño 1y2 Float"}
+
+## Column
+
+### Recorrido Float 6903003
+
+```{r }
+map_only[[6]]
+```
+
+### Temperatura Subsuperficial Últimos 4 ciclos
+
+```{r }
+ft1[[6]]
+```
+
+## Column
+
+### Ubicación Float 6903003
+```{r }
+map_all[[6]]
+```
+
+### Temperatura Subsuperficial Próximos 4 ciclos
+
+```{r }
+ft2[[6]]
+```
+
+
+
+# TSM
+
+## Row {.tabset}
+
+### Anomalía Temperatura Superficial del Mar - OISST
+
+
+```{r map3, fig.width=14, fig.height=7}
+library(raster)
+#filledContour(da-273.15,col=rev(paletteer_c("ggthemes::Red-Blue Diverging",32-7/1)),main= paste0("Temperatura Superficial del Mar ",Sys.Date()-1),levels=seq(7,32,1))
+library(maps)
+library(rasterVis)
+library(maps)
+library(maptools)
+library(rerddap)
+library(metR)
+#countries <- map("world",plot=F)
+#countries <- map2SpatialLines(countries)
+
+time <- Sys.Date()-2
+time <- as.character(time)
+Oisst<- griddap('ncdcOisst21NrtAgg',
+        time = c(time,time),
+        latitude = c(-60, 20),
+        longitude = c(150, -15+360))
+
+
+#levelplot(da-273.15,margin=F, at=seq(1,32,1),maxpixels=1e6,col.regions=rev(paletteer_c("grDevices::Spectral",32-1+1)),ylab="Latitud (°)",xlab="Longitud(°)",main=paste0("Temperatura Superficial del Mar (°C) - Ostia ",Sys.Date()-1),sub="Fuente de datos: Copernicus                                                                          Procesamiento: CIO Challenger")+contourplot(da-273.15, at = seq(10,32,2),lwd = 0.5,labels = list(cex = 0.6))+latticeExtra::layer(sp.lines(countries))
+
+mapa <- map_data("world2") 
+mapa <- mapa[mapa$long >= 150 & mapa$long <= -15+360 & mapa$lat <= 20 & mapa$lat >= -60,]
+world <- list(geom_polygon(data=mapa,aes(long,lat,group=group),size=0.2,color="black",fill="white"),coord_quickmap(xlim=c(150, -15+360),ylim=c(-60, 20)),scale_x_longitude(),scale_y_latitude())
+library(paletteer)
+
+col <- c("#000ba3","#021fe7","#0345fe","#0076ff","#0691fe","#0aa0fd","#0daffc","#6fd2ff","#a5e5fe","#d3f3ff",
+         "#ffffff","#fef9d2","#ffde62","#ffc105","#ffa500","#ff7d01","#f92d00","#e92400","#d81d00","#c51301","#b00d00")
+
+
+ggplot() + theme_bw() + 
+  geom_contour_fill(data = Oisst$data, aes(x = longitude, y = latitude, z = anom),breaks=c(-7:-3,-2.5,-2,-1.5,-1,-0.5,-0.2,0.2,0.5,1,1.5,2,2.5,3:7)) + 
+  scale_fill_gradientn(colours = col,breaks=c(-7:-3,-2.5,-2,-1.5,-1,-0.5,-0.2,0.2,0.5,1,1.5,2,2.5,3:7), na.value = NA, limits = c(-7,7), name = "ATSM (°C)") +
+  ylab("Latitud") + xlab("Longitud") +
+  ggtitle(paste0("Anomalía Temperatura Superficial del Mar OISST ",substr(unique(Oisst$data$time),1,10)))+
+  theme(plot.title = element_text(hjust = 0.5,face = "bold"),legend.key.height = unit(3,"cm"))+
+  world +
+  guides(fill = guide_colorsteps())+
+  geom_rect(
+    aes(xmin = -90+360, xmax = -80+360, ymin = -10, ymax = 0),
+    fill = NA,col="black",size=1
+  )+
+  geom_rect(
+    aes(xmin = -170+360, xmax = -120+360, ymin = -5, ymax = 5),
+    fill = NA,col="black",size=1
+  )+
+  geom_rect(
+    aes(xmin = -150+360, xmax = -90+360, ymin = -5, ymax = 5),
+    fill = NA,col="red",linetype="dashed",size=1
+  )+
+  geom_rect(
+    aes(xmin = 160, xmax = -150+360, ymin = -5, ymax = 5),
+    fill = NA,col="blue",linetype="dashed",size=1
+  )+geom_text(aes(x = -85+360, y = 2),size=3, label = "Niño 1+2", color = "black",stat="unique")+
+  geom_text(aes(x = -145+360, y = 7), label = "Niño 3.4", color = "black",stat="unique")+
+  geom_text(aes(x = -120+360, y = 7), label = "Niño 3", color = "#8B2323",stat="unique")+
+  geom_text(aes(x = (-150+360+160)/2, y = 7), label = "Niño 4", color = "blue",stat="unique")
+
+
+
+```
+
+
+
+### Temperatura Superficial del Mar - OISST
+
+```{r map4, fig.width=14, fig.height=7}
+ggplot() + theme_bw() +
+  geom_contour_fill(data = Oisst$data, aes(x = longitude, y = latitude, z = sst),breaks=7:31) + 
+  scale_fill_gradientn(colours = rev(paletteer_c("grDevices::Spectral", 30)),breaks= 7:31,na.value = NA, name = "TSM (°C)")+
+  geom_rect(
+    aes(xmin = -90+360, xmax = -80+360, ymin = -10, ymax = 0),
+    fill = NA,col="black",size=1
+  )+
+  geom_rect(
+    aes(xmin = -170+360, xmax = -120+360, ymin = -5, ymax = 5),
+    fill = NA,col="black",size=1
+  )+
+  geom_rect(
+    aes(xmin = -150+360, xmax = -90+360, ymin = -5, ymax = 5),
+    fill = NA,col="red",linetype="dashed",size=1
+  )+
+  geom_rect(
+    aes(xmin = 160, xmax = -150+360, ymin = -5, ymax = 5),
+    fill = NA,col="blue",linetype="dashed",size=1
+  )+geom_text(aes(x = -85+360, y = 2),size=3, label = "Niño 1+2", color = "black",stat="unique")+
+  geom_text(aes(x = -145+360, y = 7), label = "Niño 3.4", color = "black",stat="unique")+
+  geom_text(aes(x = -120+360, y = 7), label = "Niño 3", color = "#8B2323",stat="unique")+
+  geom_text(aes(x = (-150+360+160)/2, y = 7), label = "Niño 4", color = "blue",stat="unique")+
+  geom_contour(data = Oisst$data, aes(x = longitude, y = latitude, z = sst),breaks = 20, color = "black") +
+  ylab("Latitud") + xlab("Longitud") +
+  ggtitle(paste0("Temperatura Superficial del Mar OISST ",substr(unique(Oisst$data$time),1,10),", Isoterma 20 °C"))+
+  theme(plot.title = element_text(hjust = 0.5,face = "bold"),legend.key.height = unit(3,"cm"))+
+  world+
+  guides(fill = guide_colorsteps())
+
+
+```
+
+
+
+
+
+# Precipitación
+
+
+## Column
+
+Estaciones convencionales y automáticas de la red Senamhi
+
+Técnica usada: web scraping, convirtiendo paquete phd-scraper (python) a R
+
+### Mapa Estaciones Senamhi
+
+```{r map2}
+lat2 <- paste0(tab$lat,"°S")
+lon <- tab$lon
+lon2 <- paste0(tab$lon,"°W")
+lat <- tab$lat
+name <- tab$nom
+
+leaflet() %>%
+  addProviderTiles('Esri.WorldImagery', options = providerTileOptions())%>% setView(lng=-80.5, lat=-4.6, zoom=7) %>% 
+  addMiniMap(toggleDisplay = T) %>% 
+  addLayersControl(overlayGroups = c('Círculos',"Edición","Icon","Polígono","Línea")) %>%
+  addSearchFeatures(
+    targetGroups = c('Círculos',"Edición","Icon","Línea","Polígono"),
+    options = searchFeaturesOptions(
+      zoom=25, openPopup = TRUE, firstTipSubmit = TRUE,
+      autoCollapse = TRUE, hideMarkerOnCollapse = TRUE
+    )
+  )%>%
+  addMeasure(primaryLengthUnit = "meters",
+             secondaryLengthUnit = "kilometers",
+             primaryAreaUnit = "hectares",
+             secondaryAreaUnit = "sqmeters",
+             activeColor = "red",
+             completedColor = "red")%>%addCircleMarkers(lat = lat, lng =lon, weight = 5, radius = 10,popup = paste0(1:7,". Estación ",name," ",lat2," ",lon2),label = paste0(1:7,". Estación ",name," ",lat2," ",lon2),color = "red", fillOpacity = 0.5,group="Círculos")%>%
+  addMarkers(lat=lat,
+             lng=lon,
+             group= "Icon",popup = paste0(1:7,". Estación ",name," ",lat2," ",lon2),label = paste0(1:7,". Estación ",name," ",lat2," ",lon2))%>%
+  addPolylines(lat=lat,
+               lng=lon,
+               color = 'red',
+               group = 'Línea') %>%
+  addPolygons(lat=lat,
+              lng=lon,
+              color="green",
+              fillColor = 'green',
+              fillOpacity = 0.6,
+              group = 'Polígono')%>%
+  hideGroup(c("Línea","Polígono"))%>% 
+  addDrawToolbar(targetGroup = "Edición",editOptions = editToolbarOptions(selectedPathOptions = selectedPathOptions))%>%addStyleEditor()
+
+```
+
+
+
+### Estación El Alto
+
+```{r}
+grafica[[1]]
+
+```
+
+### Estación Pananga
+
+```{r}
+grafica[[2]]
+
+```
+
+### Estación Mallares
+
+```{r}
+grafica[[3]]
+
+```
+
+## Column
+
+### Estación La Esperanza
+
+```{r}
+grafica[[4]]
+
+```
+
+
+
+### Estación Bernal
+
+```{r}
+grafica[[5]]
+
+```
+
+### Estación Ayavaca
+
+```{r}
+grafica[[6]]
+
+```
+
+### Estación Jayanca
+
+```{r}
+grafica[[7]]
+
+```
+
+
+
+
+
+# About
+
+### Proyecto de Monitoreo ENSO
+
+Círculo de Investigación Oceanográfica CIO Challenger - Universidad Nacional Agraria La Molina
+
+Web page : [CIO](https://www.ciochallenger.com/ "Ingresa al Git Hub"){target="_blank"}
+
+UNALM - Lima, Perú
+
+Normal climatológica y año 2023, comparativa boyas.
+
+Actualizado el: `r Sys.Date()`
+
+Proyecto parte de la rama Monitoreo ENOS
+
+Desarrollado por : Est. Victor Eduardo Diaz Romero
+
+[20180177\@lamolina.edu.pe](mailto:20180177@lamolina.edu.pe){.email}
+
+Github : [Viedro](https://github.com/viedro "Ingresa al Git Hub"){target="_blank"}
+
+***Proyecto aun en desarrollo***
